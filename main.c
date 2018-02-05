@@ -53,9 +53,10 @@ int splitLast(){
             basename[0] = '\0';
         }
 
-        printf("dirname: %s, basename:%s\n", dirname, basename);
+        //debug code
+        //printf("dirname: %s, basename:%s\n", dirname, basename);
     } else {
-        printf("dirname: \"\", basename: \"\"\n");
+        //printf("dirname: \"\", basename: \"\"\n");
     }
 }
 
@@ -317,6 +318,10 @@ void saveHelper(NODE *curNode, FILE *file, char path[128]){
 }
 
 void save(){
+    if(pathname[0] == '\0'){
+        strcpy(pathname, "directory");
+    }
+
     FILE *file = fopen(pathname, "w");
 
     if(file != NULL) {
@@ -325,10 +330,6 @@ void save(){
     } else {
         printf("Could not open file %s\n", pathname);
     }
-
-}
-
-void reloadHelper(NODE *parentNode, FILE *file){
 
 }
 
@@ -347,6 +348,29 @@ void reload(){
 
     if(file != NULL){
         clearTree(root);
+
+        while (1) {
+            char type = fgetc(file);
+            fgetc(file); //consume the space
+
+            if(type == EOF){
+                break;
+            }
+
+            fgets(pathname, 64, file);
+
+            if(strcmp(pathname, "/\n") != 0) {
+
+                splitLast();
+
+                //remove the trailing newline character
+                basename[strlen(basename) - 1] = '\0';
+
+
+                NODE *parent = getNode(dirname, "/");
+                makeChild(parent, basename, type);
+            }
+        }
     } else {
         printf("Could not open file %s\n", pathname);
     }
@@ -391,11 +415,13 @@ int main(){
             }
         }
 
-        if(!commandFound){
+        if(!commandFound && strcmp("quit", command) != 0){
             printf("Could not find command %s\n", command);
         }
 
-    }while(strcmp(command, "exit"));
+    }while(strcmp(command, "quit"));
+
+    save();
 
 
     return 0;
