@@ -27,4 +27,6 @@ typedef struct proc{
 }PROC;
 
 PROC *get_proc();
-PROC *dequeue();
+PROC *dequeue(PROC **queue);
+int enqueue(PROC **queue, PROC *p);
+int printList(char *name, PROC *p);

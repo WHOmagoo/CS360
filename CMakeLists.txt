@@ -7,4 +7,4 @@ set(CMAKE_C_FLAGS -m32)
 set(CMAKE_CXX_COMPILER gcc)
 set(CMAKE_CXX_FLAGS -m3)
 
-add_executable(CS360 t.c)
+add_executable(CS360 queue.c)
