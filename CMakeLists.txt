@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_C_COMPILER gcc)
 set(CMAKE_C_FLAGS -m32)
 set(CMAKE_CXX_COMPILER gcc)
-set(CMAKE_CXX_FLAGS -m3)
+set(CMAKE_CXX_FLAGS -m32)
 
-add_executable(CS360 queue.c)
+set(SOURCES t.c s.s queue.c)
+
+add_executable(CS360 ${SOURCES})
