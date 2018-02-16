@@ -67,13 +67,12 @@ int do_kfork()
 }
 
 PROC* findP1(){
-    printf("fFinding p1");
 
     PROC *cur = readyQueue;
     while(cur){
 
         if(cur->pid == 1){
-            printf("p1 found in ready queue");
+            printf("p1 found in ready queue\n");
             return cur;
         } else {
             cur = cur->next;
@@ -83,7 +82,7 @@ PROC* findP1(){
     cur = freeList;
     while(cur){
         if(cur->pid == 1){
-            printf("p1 found in freelist");
+            printf("p1 found in freelist\n");
             return cur;
         } else {
             cur = cur->sibling;
@@ -93,22 +92,20 @@ PROC* findP1(){
     cur = sleepList;
     while(cur){
         if(cur->pid == 1){
-            printf("p1 Found in sleeplist");
+            printf("p1 Found in sleeplist\n");
             return cur;
         } else {
             cur = cur->sibling;
         }
     }
 
-    printf("P1 was not found at all");
+    printf("P1 was not found at all\n");
 
     return 0;
 }
 
 int kexit()
 {
-    //printf("proc %d in kexit()\n", running->pid);
-//    printf("YES");
 
     if (running->pid == 1){
         printf("P1 never dies\n");
@@ -116,10 +113,8 @@ int kexit()
     }
 
     printf("P%d for giving children \n", running->pid);
-    printf("\n");
     printf("P%d children = ", running->pid);
     printChildren(running);
-    printf("Finished printing");
 
 
     /********** DO: give all children to P1 *************
@@ -128,20 +123,19 @@ int kexit()
     ******************************************************/
 
 //    (1). record pid as exitStatus;
-    printf("Setting exit code to pid");
     running->exitCode = running->pid;
-    printf("Setting zombie state");
 //    (2). become a ZOMBIE;
     running->status = ZOMBIE;
 
 //    (3). send children to P1; wakeup P1 if has sent any child to P1;
     PROC *cur = running->child;
 
-    printf("Waking p1");
     kwakeup(1);
-    printf("p1 is woke");
 
     PROC *p1 = findP1();
+
+    printf("P1 children = ");
+    printChildren(p1);
 
     PROC *p1childEnd = p1->child;
     PROC *p1Prev = 0;
@@ -154,11 +148,12 @@ int kexit()
     p1childEnd->sibling = cur;
 
     while(cur){
-        cur->parent = 1;
+        cur->parent = p1;
+        cur->ppid = 1;
         cur = cur->sibling;
     }
 
-    printf("P1 = ");
+    printf("P1 children = ");
     printChildren(p1);
 
     kwakeup(running->ppid);   // wakeup parent if it's waiting
@@ -167,7 +162,6 @@ int kexit()
 
 int do_exit()
 {
-    printf("in exit");
     kexit();
 }
 

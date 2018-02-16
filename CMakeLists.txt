@@ -8,7 +8,7 @@ set(CMAKE_CXX_COMPILER gcc)
 set(CMAKE_CXX_FLAGS -m32)
 set(CMAKE_ASM_FLAGS -m32)
 
-set(SOURCES t.c s.s queue.o)
+set(SOURCES t.c type.h s.s queue.o)
 
 
 add_executable(Cur ${SOURCES})
