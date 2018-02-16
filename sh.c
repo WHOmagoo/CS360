@@ -18,16 +18,14 @@ typedef struct PathList{
 }PathList;
 
 int main(int argc, char *argv[], char *env[]){
-    int first, *myInt;
-    first ++;
-    int numbers[] = {1,2};
-
-    printf("%d", *myInt);
-
     for(int i = 0; env[i]; i++){
+        printf("%s\n", env[i]);
         char envProp[strlen(env[i])+1];
         strcpy(envProp, env[i]);
+
+
         char *token = strtok(envProp, "=");
+
         if(strcmp(token, "HOME") == 0){
             strcpy(home, strtok(NULL, "\0"));
         } else if (strcmp(token, "PATH") == 0){
@@ -73,20 +71,26 @@ int main(int argc, char *argv[], char *env[]){
 
 int execute(char *program, char *env[]){
     PathList *cur = path;
-    char *myargv[3] = {program,  "TestBoi", "\0"};
+    char *myargv[3] = {NULL,  "TestBoi", NULL};
 
-    char *args[] = {"TestBoi", NULL};
+    while(cur){
+        int result = 0;
 
-    execve("/usr/bin/mkdir", args, env);
-//    while(cur){
-//        int result = 0;
-//        result = execve(cur->path, myargv, env);
-//
-//        if(result == -1){
-//            printf("Not found in %s\n", cur->path);
-//        }
-//
-//        cur = cur->next;
-//
-//    }
+        char tmp[128] = "\0";
+        strcpy(tmp, cur->path);
+        strcat(tmp, "/");
+        strcat(tmp, program);
+
+        myargv[0] = tmp;
+
+        printf("%s", myargv[0]);
+        result = execve(myargv[0], myargv, env);
+
+        if(result == -1){
+            printf("Not found in %s\n", cur->path);
+        }
+
+        cur = cur->next;
+
+    }
 }
