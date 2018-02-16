@@ -7,6 +7,6 @@ set(CMAKE_C_FLAGS -m32)
 set(CMAKE_CXX_COMPILER gcc)
 set(CMAKE_CXX_FLAGS -m32)
 
-set(SOURCES t.c s.s queue.c)
+set(SOURCES oldT.c s.s queue.c t.c)
 
 add_executable(CS360 ${SOURCES})

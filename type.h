@@ -8,6 +8,8 @@
 #define ZOMBIE    2
 #define SLEEP     3
 
+char *status[4] = {"FREE", "READY", "ZOMBIE", "SLEEP"};
+
 typedef struct proc{
     struct proc *next;      // next proc pointer:        0
     int  *saved_sp;         // do NOT alter this field:  4
