@@ -110,8 +110,7 @@ PROC* findP1(){
 
 int kexit()
 {
-    int i;
-    printf("proc %d in kexit()\n", running->pid);
+    //printf("proc %d in kexit()\n", running->pid);
 //    printf("YES");
 
     if (running->pid == 1){
@@ -119,11 +118,11 @@ int kexit()
         return -1;
     }
 
-    printf("P%d for giving children \n", running->pid);
-    printf("\n");
-    printf("P%d children = ", running->pid);
-//    printChildren(running);
-    printf("Finished printing");
+//    printf("P%d for giving children \n", running->pid);
+//    printf("\n");
+////    printf("P%d children = ", running->pid);
+////    printChildren(running);
+//    printf("Finished printing");
 
 
     /********** DO: give all children to P1 *************
@@ -297,6 +296,7 @@ int kfork()
 
 int init()
 {
+    //haha
     int i; PROC *p;
     for (i = 0; i < NPROC; i++){
         p = &proc[i];
