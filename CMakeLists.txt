@@ -9,4 +9,4 @@ set(CMAKE_CXX_FLAGS -m32)
 
 set(SOURCES sh.c)
 
-add_executable(CS360 ${SOURCES})
+add_executable(SHsimulator ${SOURCES})
