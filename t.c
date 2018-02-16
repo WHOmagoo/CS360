@@ -6,7 +6,6 @@ PROC proc[NPROC], *running, *freeList, *readyQueue, *sleepList;
 
 
 int printChildren(PROC *parent){
-    printf("'%d", parent->child);
     PROC *cur = parent->child;
 
     while(cur){
@@ -16,8 +15,6 @@ int printChildren(PROC *parent){
     }
 
     printf("NULL\n");
-    printf("'%d'", parent->child);
-    //printf("FINISHED!!!!");
     return 1;
 }
 
@@ -79,7 +76,7 @@ PROC* findP1(){
             printf("p1 found in ready queue");
             return cur;
         } else {
-            cur = cur->sibling;
+            cur = cur->next;
         }
     }
 
@@ -118,11 +115,11 @@ int kexit()
         return -1;
     }
 
-//    printf("P%d for giving children \n", running->pid);
-//    printf("\n");
-////    printf("P%d children = ", running->pid);
-////    printChildren(running);
-//    printf("Finished printing");
+    printf("P%d for giving children \n", running->pid);
+    printf("\n");
+    printf("P%d children = ", running->pid);
+    printChildren(running);
+    printf("Finished printing");
 
 
     /********** DO: give all children to P1 *************
