@@ -314,9 +314,9 @@ int init()
 }
 
 /*************** main() ***************/
-main()
+int initializeMultitasking()
 {
-    printf("\nWelcome to KCW's 360 Multitasking System\n");
+    //printf("\nWelcome to KCW's 360 Multitasking System\n");
     init();
     kfork();
     printf("P0: switch task\n");

@@ -6,6 +6,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <wait.h>
+#include <fcntl.h>
+#include "t.h"
 
 struct PathList *path;
 
@@ -17,31 +20,74 @@ typedef struct PathList{
 int execute(char *args[], char *env[]){
     PathList *cur = path;
 
-    char programName[128];
-    strcpy(programName, args[0]);
+    int pid = fork();
+    int status;
+    if(pid){
+        pid = wait(&status);
+        printf("PID: %d, Status: %d\n", pid, status);
+        return 1;
+    } else {
+        char programName[128];
+        strcpy(programName, args[0]);
+//        if(strcmp("<", param) == 0){ //infile
+//            param = strtok(NULL, " ");
+//            if(param){
+////                    close(0);
+//                open(param, O_RDONLY | O_CREAT, 0644);
+//            } else {
+//                printf("Error, no file speicfied");
+//                break;
+//            }
+//        } else if(strcmp(">", param) == 0) { //outfile
+//            param = strtok(NULL, " ");
+//            if(param){
+////                    close(1);
+//                open(param, O_CREAT | O_WRONLY, 0644);
+//            } else {
+//                printf("Error, no file speicfied");
+//                break;
+//            }
+//        } else if(strcmp(">>", param) == 0){ //append
+//            printf("Included a >>\n");
+//            param = strtok(NULL, " ");
+//            printf("File name is %s\n", param);
+//            if(param){
+//                close(1);
+//                printf("Opening %s in append mode\n", param);
+//                open(param,  O_WRONLY | O_APPEND | O_CREAT, 0644);
+//            } else {
+//                printf("Error, no file specified");
+//                break;
+//            }
+//        }
 
-    while(cur){
-        int result = 0;
+        while (cur) {
+            int result = 0;
 
-        char tmp[128] = "\0";
-        strcpy(tmp, cur->path);
-        strcat(tmp, "/");
-        strcat(tmp, programName);
+            char tmp[128] = "\0";
+            strcpy(tmp, cur->path);
+            strcat(tmp, "/");
+            strcat(tmp, programName);
 
-        args[0] = tmp;
+            args[0] = tmp;
 
-        result = execve(args[0], args, env);
+            result = execve(args[0], args, env);
 
-        if(result == -1){
-            printf("not found at %s\n", args[0]);
+            if (result == -1) {
+                printf("not found at %s\n", args[0]);
+            }
+
+            cur = cur->next;
+
+
         }
-
-        cur = cur->next;
-
     }
 }
 
 int main(int argc, char *argv[], char *env[]){
+
+//    init();
+//    kfork();
 
     char home[128];
     int homeIndex = -1;
@@ -94,9 +140,9 @@ int main(int argc, char *argv[], char *env[]){
 
     printf("HOME = %s\n", home);
 
-    char command[128] = "\0";
 
     while(1) {
+        char command[128] = "\0";
         printf("%s $ ", pwd + 4);
 
         scanf("%127[^\n]", command);
@@ -109,20 +155,22 @@ int main(int argc, char *argv[], char *env[]){
 
         char *param = strtok(command, " ");
 
-        while(param){
+        while (param) {
+
             PathList *cur = (PathList *) malloc(sizeof(PathList));
             paramCount++;
             strcpy(cur->path, param);
             cur->next = 0;
-            if(prev){
+            if (prev) {
                 prev->next = cur;
             } else {
                 firstParam = cur;
             }
             prev = cur;
-
             param = strtok(NULL, " ");
         }
+
+
 
         char *args[paramCount + 1];
 
@@ -132,7 +180,6 @@ int main(int argc, char *argv[], char *env[]){
             args[count] = firstParam->path;
             firstParam = firstParam->next;
         }
-
         args[paramCount] = 0;
 
         for (int i = 0; i <= paramCount; ++i) {
@@ -165,10 +212,15 @@ int main(int argc, char *argv[], char *env[]){
         }
 
 
+        printf("Freeing memory\n");
+
         while(prev){
-            PathList *tmp = prev;
+            PathList *last = prev;
             prev = prev->next;
-            free(tmp);
+            free(last);
         }
+
+
     }
+
 }

@@ -8,7 +8,7 @@ set(CMAKE_CXX_COMPILER gcc)
 set(CMAKE_CXX_FLAGS -m32)
 set(CMAKE_ASM_FLAGS -m32)
 
-set(SOURCES t.c type.h s.s queue.o sh.c)
+set(SOURCES t.c type.h s.s queue.o sh.c t.h)
 
 add_executable(SHsimulator ${SOURCES})
 #add_custom_target(run COMMAND make -f mk)
