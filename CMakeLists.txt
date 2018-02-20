@@ -11,6 +11,6 @@ set(CMAKE_ASM_FLAGS -m32)
 set(SOURCES t.c type.h s.s queue.o)
 
 
-add_executable(Cur ${SOURCES})
+add_executable(Current ${SOURCES})
 #add_custom_target(run COMMAND make -f mk)
 #add_custom_target(run COMMAND binary DEPENDS run WORKING_DIRECTORY $(CMAKE_PROJECT_DIR))
