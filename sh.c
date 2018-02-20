@@ -29,37 +29,61 @@ int execute(char *args[], char *env[]){
     } else {
         char programName[128];
         strcpy(programName, args[0]);
-//        if(strcmp("<", param) == 0){ //infile
-//            param = strtok(NULL, " ");
-//            if(param){
-////                    close(0);
-//                open(param, O_RDONLY | O_CREAT, 0644);
-//            } else {
-//                printf("Error, no file speicfied");
-//                break;
-//            }
-//        } else if(strcmp(">", param) == 0) { //outfile
-//            param = strtok(NULL, " ");
-//            if(param){
-////                    close(1);
-//                open(param, O_CREAT | O_WRONLY, 0644);
-//            } else {
-//                printf("Error, no file speicfied");
-//                break;
-//            }
-//        } else if(strcmp(">>", param) == 0){ //append
-//            printf("Included a >>\n");
-//            param = strtok(NULL, " ");
-//            printf("File name is %s\n", param);
-//            if(param){
-//                close(1);
-//                printf("Opening %s in append mode\n", param);
-//                open(param,  O_WRONLY | O_APPEND | O_CREAT, 0644);
-//            } else {
-//                printf("Error, no file specified");
-//                break;
-//            }
-//        }
+
+        int mode = 0;
+        char *location = 0;
+        char *newArgs;
+
+        for (int i = 0; args[i]; ++i) {
+            if(strcmp("<", args[i]) == 0){ //infile
+                args[i] = NULL;
+                i++;
+                if(args[i]){
+                    location = args[i];
+                    mode = 1;
+                    //close(0);
+
+                    //open(args[i], O_RDONLY | O_CREAT, 0644);
+                } else {
+                    printf("Error, no file speicfied");
+                    return -1;
+                }
+            } else if(strcmp(">", args[i]) == 0) { //outfile
+                args[i] = NULL;
+                i++;
+                if(args[i]){
+                    mode = 2;
+                    location = args[i];
+//                    close(1);
+//                    open(param, O_CREAT | O_WRONLY, 0644);
+                } else {
+                    printf("Error, no file speicfied");
+                    return -1;
+                }
+            } else if(strcmp(">>", args[i]) == 0){ //append
+                args[i] = NULL;
+                i++;
+                if(args[i]){
+                    mode = 3;
+                    location = args[i];
+//                    close(1);
+//                    printf("Opening %s in append mode\n", param);
+//                    open(param,  O_WRONLY | O_APPEND | O_CREAT, 0644);
+                } else {
+                    printf("Error, no file specified");
+                    return -1;
+                }
+            } else if(strcmp("|", args[i]) == 0){
+                args[i] == NULL;
+                newArgs = args[i+1];
+                mode = 4;
+            }
+
+        }
+
+
+        int stdIn = dup(0);
+        int stdOut = dup(1);
 
         while (cur) {
             int result = 0;
@@ -71,9 +95,47 @@ int execute(char *args[], char *env[]){
 
             args[0] = tmp;
 
-            result = execve(args[0], args, env);
+            if(mode == 1){
+                close(0);
 
+                open(location, O_RDONLY | O_CREAT, 0644);
+            } else if (mode == 2){
+                close(1);
+
+                open(location, O_WRONLY | O_CREAT, 0644);
+            } else if (mode == 3){
+                close(1);
+
+                open(location, O_WRONLY | O_APPEND | O_CREAT, 0644);
+            }
+
+
+            if(mode == 4){
+                int pd[2];
+                pipe(pd);
+                pid = fork();
+                if (pid){ // parent as pipe WRITER
+                    close(pd[0]);
+                    close(1);
+                    dup(pd[1]);
+                    close(pd[1]);
+                    execve(args[0], args, env);
+                }
+                else{     // child as pipe READER
+                    close(pd[1]);
+                    close(0);
+                    dup(pd[0]);
+                    close(pd[0]);
+                    execve(newArgs[0], newArgs, env);
+                }
+            } else {
+                result = execve(args[0], args, env);
+            }
             if (result == -1) {
+                if(location && (mode == 2 || mode == 3)) {
+                    close(location);
+                    dup2(stdOut, 1);
+                }
                 printf("not found at %s\n", args[0]);
             }
 
@@ -210,9 +272,6 @@ int main(int argc, char *argv[], char *env[]){
                 execute(args, env);
             }
         }
-
-
-        printf("Freeing memory\n");
 
         while(prev){
             PathList *last = prev;
