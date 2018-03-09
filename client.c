@@ -61,6 +61,31 @@ int client_init(char *argv[])
     printf("========= init done ==========\n");
 }
 
+put(char *fileName){
+    char format[16] = "%";
+    char size[16];
+
+    sprintf(size, "%d", MAX - 1);
+
+    strcat(format, size);
+    strcat(format, "s");
+
+    FILE * file = fopen(fileName, "r");
+
+
+    while(file && !feof(file)) {
+        char data[MAX];
+
+        fscanf(file, format, data);
+
+
+    }
+}
+
+sendString(char *string, int length){
+    int n = send(server_sock, string, MAX, 0);
+}
+
 main(int argc, char *argv[ ])
 {
     int n;
@@ -93,6 +118,8 @@ main(int argc, char *argv[ ])
 
         // Send ENTIRE line to server
         //n = write(server_sock, line, MAX);
+
+        put("something");
 
         n = send(server_sock, line, MAX, 0);
 
