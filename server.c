@@ -18,6 +18,8 @@ int  r, length, n;                   // help variables
 
 // Server initialization code:
 
+char stringBuf[MAX];
+
 int server_init(char *name)
 {
     printf("==================== server init ======================\n");
@@ -91,6 +93,79 @@ int addNumbers(char numbers[]){
     return n1 + n2;
 }
 
+receivePut(){
+
+    receiveString();
+
+    FILE *file = fopen(stringBuf, "w");
+
+    if(file) {
+        while(1) {
+            receiveString();
+
+            if(strcmp(stringBuf, "\0") == 0){
+                break;
+            }
+
+            fprintf(file, "%s", stringBuf);
+
+        }
+
+        fclose(file);
+
+    } else {
+        n = send(client_sock, "err", 4, 0);
+        printf("Could not open %s for writing\n", stringBuf);
+    }
+}
+
+sendGet(){
+
+    n = recv(client_sock, stringBuf, MAX, 0);
+
+    FILE * file = fopen(stringBuf, "r");
+
+    if(file) {
+
+        n = send(client_sock, "ok", 4, 0);
+
+        while (!feof(file)) {
+            char data[MAX] = "\0";
+
+            fread(data, 1, MAX - 1, file);
+
+
+            sendString(data, MAX);
+        }
+
+        sendString("\0", MAX);
+    } else {
+        n = send(client_sock, "err", 4, 0);
+        printf("Could not open file %s for read mode\n", stringBuf);
+    }
+}
+
+int sendString(char string[], int length){
+    char response[4];
+    int n = send(client_sock, string, length, 0);
+    n = recv(client_sock, response, 4, 0);
+
+    if(strcmp(response, "ok") == 0) {
+        return 1;
+    } else{
+        printf("There was an error while sending the string.\nClient reponse was: %s", response);
+        return 0;
+    }
+}
+
+int receiveString(){
+
+    n = recv(client_sock, stringBuf, MAX, 0);
+    n = send(client_sock, "ok", 4, 0);
+
+    return 1;
+
+}
 
 main(int argc, char *argv[])
 {
@@ -131,17 +206,27 @@ main(int argc, char *argv[])
                 break;
             }
 
-            // show the line string
-            printf("server: read  n=%d bytes; line=[%s]\n", n, line);
+            if(strcmp(line, "put") == 0){
+                n = send(client_sock, "ok", 4, 0);
+                receivePut();
+            } else if(strcmp(line, "get") == 0){
+                n = send(client_sock, "ok", 4, 0);
+                sendGet();
+            } else {
+                n = send(client_sock, "err", 4, 0);
+            }
 
-            //strcat(line, " ECHO");
-            int result = addNumbers(line);
-            sprintf(line, "%d", result);
-
-            // send the echo line to client
-            n = send(client_sock, line, MAX, 0);
-
-            printf("server: wrote n=%d bytes; ECHO=[%s]\n", n, line);
+//            // show the line string
+//            printf("server: read  n=%d bytes; line=[%s]\n", n, line);
+//
+//            //strcat(line, " ECHO");
+//            int result = addNumbers(line);
+//            sprintf(line, "%d", result);
+//
+//            // send the echo line to client
+//            n = send(client_sock, line, MAX, 0);
+//
+//            printf("server: wrote n=%d bytes; ECHO=[%s]\n", n, line);
             printf("server: ready for next request\n");
         }
     }
