@@ -31,7 +31,7 @@ int client_init(char *argv[])
     }
 
     SERVER_IP   = *(long *)hp->h_addr;
-    SERVER_PORT = atoi(argv[2]);f
+    SERVER_PORT = atoi(argv[2]);
 
     printf("2 : create a TCP socket\n");
     server_sock = socket(AF_INET, SOCK_STREAM, 0);
