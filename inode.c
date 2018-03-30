@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <ext2fs/ext2_fs.h>
+#include <memory.h>
 
 #define BLKSIZE 1024
 
@@ -77,26 +78,78 @@ inode()
      u32  i_block[15];                 // IMPORTANT, but later
     ***************************/
 
-    printDirectories(ip->i_links_count);
+    char file[124] = "X/tiny";
+
+    lookUp(file);
 }
 
-printDirectories(int blockNumber){
-    char buf[BLKSIZE];
-    int blocks[15];
-    for(int i = 0; i < 15; i++) {
-        blocks[i] = ip->i_block[i];
-    }
-    get_block(fd, blocks[0], buf);
+lookUp(char *file){
+    char *curEnd = strchr(file, '/');
+    if(curEnd) {
+        char buf[BLKSIZE];
+        int blocks[15];
+        for (int i = 0; i < 15; i++) {
+            blocks[i] = ip->i_block[i];
+        }
+        get_block(fd, blocks[0], buf);
 
-    int len = 0;
+        *curEnd = '\0';
+        int len = 0;
 
-    while (len < BLKSIZE) {
+
+        while (len < BLKSIZE) {
 
 
-        dp = (DIR *) (buf + len);
+            dp = (DIR *) (buf + len);
 
-        printf("%s\n", dp->name);
-        len += dp->rec_len;
+            printf("%s\n", dp->name);
+            if (strcmp(dp->name, file) == 0) {
+                printf("in %s, it is a %d type:\n", file, dp->file_type);
+                int cur_inode = dp->inode;
+                get_block(fd, iblock + (cur_inode - 1) / 8, buf);
+                ip = (INODE *) buf + (cur_inode -1 ) % 8;
+                lookUp(curEnd + 1);
+                break;
+            }
+            len += dp->rec_len;
+        }
+    } else {
+        printf("Reached end of the path, looking for '%s'\n", file);
+        int blocks[15];
+        for(int i = 0; i < 15; i++){
+            blocks[i] = ip->i_block[i];
+        }
+        char buf[BLKSIZE];
+
+        get_block(fd, blocks[0], buf);
+
+        int len = 0;
+
+        while (len < BLKSIZE) {
+
+
+            dp = (DIR *) (buf + len);
+
+            printf("%s\n", dp->name);
+            if (strcmp(dp->name, file) == 0) {
+                printf("Found %s, it is a %d type:\n", file, dp->file_type);
+                int cur_inode = dp->inode;
+                get_block(fd, iblock + (cur_inode - 1) / 8, buf);
+                ip = (INODE *) buf + (cur_inode -1 ) % 8;
+
+                for(int i = 0; i < 15; i++) {
+                    if(ip->i_block[i] == 0){
+                        break;
+                    }
+                    printf("block[%2d] = %d\n", i, ip->i_block[i]);
+                }
+
+                break;
+            }
+            len += dp->rec_len;
+        }
+
+        return 0;
     }
 }
 
