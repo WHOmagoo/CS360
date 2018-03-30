@@ -28,7 +28,7 @@ int get_block(int fd, int blk, char buf[ ])
     read(fd, buf, BLKSIZE);
 }
 
-inode()
+inode(char *path)
 {
     char buf[BLKSIZE];
 
@@ -78,9 +78,7 @@ inode()
      u32  i_block[15];                 // IMPORTANT, but later
     ***************************/
 
-    char file[124] = "X/tiny";
-
-    lookUp(file);
+    lookUp(path);
 }
 
 lookUp(char *file){
@@ -131,18 +129,84 @@ lookUp(char *file){
             dp = (DIR *) (buf + len);
 
             printf("%s\n", dp->name);
+
+
             if (strcmp(dp->name, file) == 0) {
-                printf("Found %s, it is a %d type:\n", file, dp->file_type);
+                //printf("Found %s, it is a %d type:\n", file, dp->file_type);
                 int cur_inode = dp->inode;
                 get_block(fd, iblock + (cur_inode - 1) / 8, buf);
                 ip = (INODE *) buf + (cur_inode -1 ) % 8;
 
-                for(int i = 0; i < 15; i++) {
+
+                int blocks[15] = {0};
+
+                for(int i = 0; i < 15; i++){
+                    blocks[i] = ip->i_block[i];
+                }
+
+                printf("|***Direct Blocks***|\n");
+                for(int i = 0; i < 12; i++) {
                     if(ip->i_block[i] == 0){
                         break;
                     }
-                    printf("block[%2d] = %d\n", i, ip->i_block[i]);
+                    printf("%4d ", ip->i_block[i]);
+                    if(i % 8 == 7){
+                        printf("\n");
+                    }
                 }
+
+                printf("\n");
+
+
+                if(blocks[12] != 0) {
+
+                    printf("|***Indirect Blocks***|\n");
+
+                    get_block(fd, blocks[12], buf);
+                    int *indirectBlocks = (int *) buf;
+
+                    for (int i = 0; i < 255; i++) {
+                        if (*(indirectBlocks + i) == 0) {
+                            break;
+                        }
+
+                        printf("%4d ", *(indirectBlocks + i));
+                        if(i % 8 == 7){
+                            printf("\n");
+                        }
+                    }
+                }
+
+                printf("\n");
+
+                if(blocks[13] != 0){
+                    printf("|***Doubly Indirect Blocks***|\n");
+                    get_block(fd, blocks[13], buf);
+                    int *indirectBlocks = (int *) buf;
+
+                    for (int i = 0; i < 255; i++) {
+                        if (*(indirectBlocks + i) == 0) {
+                            break;
+                        }
+
+                        char finalBlock[BLKSIZE];
+
+                        get_block(fd, *(indirectBlocks + i), finalBlock);
+
+                        int *finalBlockNumber = (int *) finalBlock;
+
+                        for(int i2 = 0; i2 < 255; i2++){
+                            if(*(finalBlockNumber + i2) == 0){
+                                break;
+                            }
+                            printf("%4d ", *(finalBlockNumber + i2));
+                            if(i2 % 8 == 7){
+                                printf("\n");
+                            }
+                        }
+                    }
+                }
+
 
                 break;
             }
@@ -155,8 +219,17 @@ lookUp(char *file){
 
 char *disk = "mydisk";
 main(int argc, char *argv[]) {
+    char* path;
+
     if (argc > 1)
         disk = argv[1];
+    else
+        printf("No disk specified");
+
+    if (argc > 2)
+        path = argv[2];
+    else
+        printf("No path specified");
 
     fd = open(disk, O_RDONLY);
     if (fd < 0) {
@@ -164,5 +237,5 @@ main(int argc, char *argv[]) {
         exit(1);
     }
 
-    inode();
+    inode(path);
 }
