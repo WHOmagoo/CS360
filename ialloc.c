@@ -22,6 +22,37 @@ int fd;
 int imap, bmap;  // IMAP and BMAP block number
 int ninodes, nblocks, nfreeInodes, nfreeBlocks;
 
+int makeDiskBlock(){
+    char buf[BLKSIZE];
+
+    get_block(fd, 1, buf);
+    sp = (SUPER *)buf;
+    int nBlocks = sp->s_blocks_count;
+
+
+    get_block(fd, 2, buf);
+    gp = (GD *) buf;
+    int bmap = gp->bg_block_bitmap;
+
+
+    printf("nBlocks = %d\n", nBlocks);
+    printf("bmap = %d\n", bmap);
+
+    get_block(fd, bmap, buf);
+
+    for (int i=0; i < nBlocks; i++){
+        if(!tst_bit(buf, i)){
+            put_block(fd, i, buf);
+            printf("Block number %d was allocated", i);
+            set_bit(buf, i);
+            return i;
+        }
+    }
+
+    printf("No more space to allocate a block");
+    return -1;
+}
+
 int get_block(int fd, int blk, char buf[ ])
 {
     lseek(fd, (long)blk*BLKSIZE, 0);
@@ -133,4 +164,6 @@ main(int argc, char *argv[ ])
         ino = ialloc(fd);
         printf("allocated ino = %d\n", ino);
     }
+
+    makeDiskBlock();
 }

@@ -10,3 +10,5 @@ set(CMAKE_ASM_FLAGS -m32)
 
 add_executable(super super.c)
 add_executable(imap imap.c)
+add_executable(ialloc ialloc.c)
+add_executable(inode inode.c)

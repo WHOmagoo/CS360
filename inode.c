@@ -31,6 +31,9 @@ inode()
 {
     char buf[BLKSIZE];
 
+    get_block(fd, 1, buf);
+    sp = (SUPER *) buf;
+
     // read GD
     get_block(fd, 2, buf);
     gp = (GD *)buf;
@@ -73,6 +76,28 @@ inode()
      u32  i_reserved1;                 // IGNORE
      u32  i_block[15];                 // IMPORTANT, but later
     ***************************/
+
+    printDirectories(ip->i_links_count);
+}
+
+printDirectories(int blockNumber){
+    char buf[BLKSIZE];
+    int blocks[15];
+    for(int i = 0; i < 15; i++) {
+        blocks[i] = ip->i_block[i];
+    }
+    get_block(fd, blocks[0], buf);
+
+    int len = 0;
+
+    while (len < BLKSIZE) {
+
+
+        dp = (DIR *) (buf + len);
+
+        printf("%s\n", dp->name);
+        len += dp->rec_len;
+    }
 }
 
 char *disk = "mydisk";

@@ -70,8 +70,26 @@ imap()
 }
 
 printBmap(){
-    printf("ip_i_block = %d\n", ip->i_blocks);
+    get_block(fd, 1, buf);
+    sp = (SUPER *)buf;
+    int nBlocks = sp->s_blocks_count;
 
+
+    get_block(fd, 2, buf);
+    gp = (GD *) buf;
+    int bmap = gp->bg_block_bitmap;
+
+
+    printf("nBlocks = %d\n", nBlocks);
+    printf("bmap = %d\n", bmap);
+
+    get_block(fd, bmap, buf);
+
+    for (int i=0; i < nBlocks; i++){
+        (tst_bit(buf, i)) ?	putchar('1') : putchar('0');
+        if (i && (i % 8)==0)
+            printf(" ");
+    }
 }
 
 char *disk = "mydisk";
