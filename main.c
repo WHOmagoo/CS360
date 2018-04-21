@@ -4,28 +4,44 @@
 
 #include <stdio.h>
 
-int main(char* args[], int argc) {
+#include "disk.h"
+
+int main(int argc, char* args[]) {
 
 
-    FILE *file = 0;
+    int file = 0;
 
     while(file == 0) {
         char fileName[124];
         int i = 0;
 
-        if (argc > 0) {
-            strcpy(fileName, args[0]);
+        if (argc > 1) {
+            strcpy(fileName, args[1]);
         } else {
             printf("disk mount location: ");
             scanf("%s", fileName);
         }
 
-        file = fopen(fileName, "rw");
+        file = open(fileName, O_RDONLY);
 
         if(file == 0){
             printf("Failed to open disk, try again.\n");
         }
+
+        init(file);
+        SUPER *sp = getSp();
+        GD *gd = getGd();
+
+        if(sp->s_magic != 0xEF53){
+            printf("Not EXT2, it was %d", sp->s_magic);
+            exit(1);
+        } else {
+
+            printf("SUPER\tmagic=%x\tbmap=%d\timap=%d\tiblock=%d", sp->s_magic, gd->bg_inode_table, sp->s_inodes_count, sp->s_first_data_block);
+        }
     }
+
+
 
 
 
