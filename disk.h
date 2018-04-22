@@ -38,5 +38,8 @@ typedef struct ext2_dir_entry_2 DIR;    // need this for new version of e2fs
 int get_block(int fd, int blk, char buf[ ]);
 int initSuper(int fd);
 SUPER * getSp();
+GD * getGd();
+INODE * getIp();
+DIR * getDir();
 
 #endif //SHSIMULATOR_DISK_H

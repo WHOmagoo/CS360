@@ -31,3 +31,11 @@ SUPER * getSp(){
 GD * getGd(){
     return gp;
 }
+
+INODE * getIp(){
+    return ip;
+}
+
+DIR * getDp(){
+    return dp;
+}

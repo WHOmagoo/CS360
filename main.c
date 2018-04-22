@@ -37,7 +37,7 @@ int main(int argc, char* args[]) {
             exit(1);
         } else {
 
-            printf("SUPER\tmagic=%x\tbmap=%d\timap=%d\tiblock=%d", sp->s_magic, gd->bg_inode_table, sp->s_inodes_count, sp->s_first_data_block);
+            printf("SUPER\tmagic=%x\tbmap=%d\timap=%d\tiblock=%d", sp->s_magic, gd->bg_block_bitmap, gd->bg_inode_bitmap, gd->bg_inode_table);
         }
     }
 
