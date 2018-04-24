@@ -16,7 +16,7 @@ typedef struct ext2_dir_entry_2 DIR;    // need this for new version of e2fs
 
 GD    *gp;
 SUPER *sp;
-INODE *ip;
+INODE *cwd;
 DIR   *dp;
 
 int fd;
@@ -47,20 +47,21 @@ inode(char *path)
        gp->bg_free_inodes_count,
        gp->bg_used_dirs_count);
     ****************/
+
     iblock = gp->bg_inode_table;   // get inode start block#
     printf("inode_block=%d\n", iblock);
 
     // get inode start block
     get_block(fd, iblock, buf);
 
-    ip = (INODE *)buf + 1;         // ip points at 2nd INODE
+    cwd = (INODE *)buf + 1;         // cwd points at 2nd INODE
 
-    printf("mode=%4x ", ip->i_mode);
-    printf("uid=%d  gid=%d\n", ip->i_uid, ip->i_gid);
-    printf("size=%d\n", ip->i_size);
-    printf("time=%s", ctime(&ip->i_ctime));
-    printf("link=%d\n", ip->i_links_count);
-    printf("i_block[0]=%d\n", ip->i_block[0]);
+    printf("mode=%4x ", cwd->i_mode);
+    printf("uid=%d  gid=%d\n", cwd->i_uid, cwd->i_gid);
+    printf("size=%d\n", cwd->i_size);
+    printf("time=%s", ctime(&cwd->i_ctime));
+    printf("link=%d\n", cwd->i_links_count);
+    printf("i_block[0]=%d\n", cwd->i_block[0]);
 
     /*****************************
      u16  i_mode;        // same as st_imode in stat() syscall
@@ -87,7 +88,7 @@ lookUp(char *file){
         char buf[BLKSIZE];
         int blocks[15];
         for (int i = 0; i < 15; i++) {
-            blocks[i] = ip->i_block[i];
+            blocks[i] = cwd->i_block[i];
         }
         get_block(fd, blocks[0], buf);
 
@@ -105,7 +106,7 @@ lookUp(char *file){
                 printf("in %s, it is a %d type:\n", file, dp->file_type);
                 int cur_inode = dp->inode;
                 get_block(fd, iblock + (cur_inode - 1) / 8, buf);
-                ip = (INODE *) buf + (cur_inode -1 ) % 8;
+                cwd = (INODE *) buf + (cur_inode -1 ) % 8;
                 lookUp(curEnd + 1);
                 break;
             }
@@ -115,7 +116,7 @@ lookUp(char *file){
         printf("Reached end of the path, looking for '%s'\n", file);
         int blocks[15];
         for(int i = 0; i < 15; i++){
-            blocks[i] = ip->i_block[i];
+            blocks[i] = cwd->i_block[i];
         }
         char buf[BLKSIZE];
 
@@ -135,21 +136,21 @@ lookUp(char *file){
                 //printf("Found %s, it is a %d type:\n", file, dp->file_type);
                 int cur_inode = dp->inode;
                 get_block(fd, iblock + (cur_inode - 1) / 8, buf);
-                ip = (INODE *) buf + (cur_inode -1 ) % 8;
+                cwd = (INODE *) buf + (cur_inode -1 ) % 8;
 
 
                 int blocks[15] = {0};
 
                 for(int i = 0; i < 15; i++){
-                    blocks[i] = ip->i_block[i];
+                    blocks[i] = cwd->i_block[i];
                 }
 
                 printf("|***Direct Blocks***|\n");
                 for(int i = 0; i < 12; i++) {
-                    if(ip->i_block[i] == 0){
+                    if(cwd->i_block[i] == 0){
                         break;
                     }
-                    printf("%4d ", ip->i_block[i]);
+                    printf("%4d ", cwd->i_block[i]);
                     if(i % 8 == 7){
                         printf("\n");
                     }

@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <ext2fs/ext2_fs.h>
 
 #define BLKSIZE 1024
@@ -37,6 +39,7 @@ typedef struct ext2_dir_entry_2 DIR;    // need this for new version of e2fs
 
 int get_block(int fd, int blk, char buf[ ]);
 int initSuper(int fd);
+int startingIblock();
 SUPER * getSp();
 GD * getGd();
 INODE * getIp();

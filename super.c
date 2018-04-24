@@ -16,7 +16,7 @@ typedef struct ext2_dir_entry_2 DIR;    // need this for new version of e2fs
 
 GD    *gp;
 SUPER *sp;
-INODE *ip;
+INODE *cwd;
 DIR   *dp;
 
 #define BLKSIZE 1024
