@@ -141,6 +141,7 @@ main(int argc, char *argv[ ])
         exit(1);
     }
 
+    printf("Hello!\n");
     // read SUPER block
     get_block(fd, 1, buf);
     sp = (SUPER *)buf;

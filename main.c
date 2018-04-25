@@ -106,10 +106,10 @@ int get_block(int fd, int blk, char buf[ ])
     read(fd, buf, BLKSIZE);
 }
 
-int set_block(int fd, int blk, char buf[])
+int put_block(int fd, int blk, char buf[])
 {
     lseek(fd, (long)blk*BLKSIZE, 0);
-    write(fd, buf, BLKSIZE);
+    return write(fd, buf, BLKSIZE);
 }
 
 int init(int fd){
@@ -379,6 +379,8 @@ void printTriplyLinkedBlock(int blockNumber){
     }
 }
 
+
+//returns the inode number of the current inode
 int getParent(INODE **inode, char buf[BLKSIZE]){
     get_block(filep, (*inode)->i_block[0], buf);
 
@@ -420,24 +422,58 @@ char *getName(INODE *inode, char buf[BLKSIZE]){
             len += dp->rec_len;
 
             if(dp->inode == iNodeNum){
-                *(dp->name + dp->name_len) = (char) '/0';
+                *(dp->name + dp->name_len) = '\0';
                 return dp->name;
             }
         }
     }
+
+    printf("Unable to find name\n");
+    return 0;
 
     //TODO implement singly and doubly indirect blocks
 
 }
 
 void pwd(){
+    char curBuf[BLKSIZE];
     char parentBuf[BLKSIZE];
 
-    bufcpy(parentBuf, iBuf);
+    bufcpy(curBuf, iBuf);
+    bufcpy(parentBuf, curBuf);
 
-    INODE *cur = (INODE *) ((u_int32_t ) parentBuf + (u_int32_t) cwd - (u_int32_t) iBuf);
+    INODE *cur = (INODE *) ((u_int32_t ) curBuf + (u_int32_t) cwd - (u_int32_t) iBuf);
+    INODE *parent = (INODE *) ((u_int32_t ) parentBuf + (u_int32_t) cwd - (u_int32_t) iBuf);
 
-    printf("%s", getName(cur, parentBuf));
+    char wd[BLKSIZE] = "";
+    char cd[BLKSIZE] = "";
+
+    while(1) {
+        bufcpy(curBuf, parentBuf);
+        cur = (INODE *) ((u_int32_t ) curBuf + (u_int32_t) parent - (u_int32_t) parentBuf);
+
+        char *name = getName(cur, curBuf);
+        strcpy(cd, name);
+
+        if(strcmp(".", cd) == 0){
+            cd[0] = '/';
+            cd[1] = '\0';
+
+
+            strcat(cd, wd);
+            strcpy(wd, cd);
+
+            break;
+        }
+
+
+        strcat(cd, "/");
+        strcat(cd, wd);
+        strcpy(wd, cd);
+        getParent(&parent, parentBuf);
+    }
+
+    printf("%s ", wd);
 
 }
 
@@ -502,8 +538,6 @@ void cat(char *location){
             if (blocks[14] != 0) {
                 printTriplyLinkedBlock(blocks[14]);
             }
-
-            printf("\n");
         }
     }
 }
@@ -525,12 +559,6 @@ void cd(char *dir){
     if(newDir != 0){
         bufcpy(iBuf, buf);
         cwd = (INODE *) ((u_int32_t )iBuf + (u_int32_t )newDir - (u_int32_t ) buf);
-//may be implemented to keep track of cwd
-//        if(*dir == '/'){
-//            strcpy(wd, dir);
-//        } else {
-//
-//        }
     }
 
 }
@@ -600,7 +628,7 @@ void ls(char *dir) {
                         permissions[0] = 'l';
                 }
 
-                printf("\t%d\t%s\t%8d\t%s\t", curInode->i_links_count, timeBuf, curInode->i_size, permissions);
+                printf("\t%d\t%s\t%8d\t%s\t%d", curInode->i_links_count, timeBuf, curInode->i_size, permissions, curInode->i_block[0]);
                 printName(dp->name, dp->name_len);
                 printf("\n");
             }
@@ -610,9 +638,248 @@ void ls(char *dir) {
     }
 }
 
-#define FUNCTIONSCOUNT 5
+int decFreeInodes(int dev)
+{
+    char buf[BLKSIZE];
 
-char *functionNames[FUNCTIONSCOUNT] = {"ls", "cd", "cat", "help", "pwd"};
+    // dec free inodes count in SUPER and GD
+    get_block(dev, 1, buf);
+    sp = (SUPER *)buf;
+    sp->s_free_inodes_count--;
+    put_block(dev, 1, buf);
+
+    get_block(dev, 2, buf);
+    gp = (GD *)buf;
+    gp->bg_free_inodes_count--;
+    put_block(dev, 2, buf);
+}
+
+int tst_bit(char *buf, int bit)
+{
+    int i, j;
+    i = bit/8; j=bit%8;
+    if (buf[i] & (1 << j))
+        return 1;
+    return 0;
+}
+
+int set_bit(char *buf, int bit)
+{
+    int i, j;
+    i = bit/8; j=bit%8;
+    buf[i] |= (1 << j);
+}
+
+int makeDiskBlock(){
+    char buf[BLKSIZE];
+
+    int nBlocks = sp->s_blocks_count;
+    int bmap = gp->bg_block_bitmap;
+
+    printf("nBlocks = %d\n", nBlocks);
+    printf("bmap = %d\n", bmap);
+    printf("inodes = %d", sp->s_inodes_count);
+
+    get_block(filep, bmap, buf);
+
+    for (int i=0; i < BLKSIZE; i++){
+        if(!tst_bit(buf, i)){
+            set_bit(buf, i);
+            put_block(filep, i, buf);
+            printf("Block number %d was allocated", i);
+            return i + 1;
+        }
+    }
+
+    printf("No more space to allocate a block");
+    return -1;
+}
+
+int ialloc(int dev)
+{
+    int  i;
+    char buf[BLKSIZE];
+
+
+    // read inode_bitmap block
+
+    get_block(dev, gp->bg_inode_bitmap, buf);
+
+    printf("Inodes count %d", sp->s_inodes_count);
+
+    for (i=0; i < sp->s_inodes_count; i++){
+        if (tst_bit(buf, i)==0){
+            set_bit(buf,i);
+            decFreeInodes(dev);
+
+            put_block(dev, gp->bg_inode_bitmap, buf);
+
+            return i+1;
+        }
+    }
+    printf("ialloc(): no more free inodes\n");
+    return 0;
+}
+
+void mkdir(char* pathName){
+    if(pathName == 0){
+        printf("No path specified");
+        return;
+    }
+
+    //remove trailing back slash
+    pathName = strtok(pathName, "\n");
+
+    char buf[BLKSIZE];
+    char *baseName = splitLast(pathName);
+
+    if(baseName == 0) {
+        if(*pathName == '/'){
+            baseName = pathName + 1;
+            pathName = "/";
+        } else {
+            baseName = pathName;
+            pathName = 0;
+        }
+    }
+
+    INODE *cur = getDir(pathName, buf);
+
+    int blocks[15];
+    int newItemLen = strlen(baseName);
+    int rec_len = newItemLen + 4 - (newItemLen % 4) + 8;
+
+    for(int i = 0; i < 15; i++){
+        blocks[i] = cur->i_block[i];
+    }
+
+    for(int i = 0; i < 12 && blocks[i] != 0; i++){
+        get_block(filep, blocks[i], buf);
+        int len = 0;
+
+        while (len < BLKSIZE) {
+            DIR *dp = (DIR *) (buf + len);
+            len += dp->rec_len;
+
+            if (my_strcmp(dp->name, baseName, dp->name_len) == 0) {
+                if(!pathName){
+                    pathName = "directory";
+                }
+                printf("Could not make %s, it already exists in %s", baseName, pathName);
+                return;
+            }
+        }
+    }
+
+    int success = 0;
+    for(int i = 0; i < 12; i++){
+        get_block(filep, blocks[i], buf);
+
+        int len = 0;
+
+        while (len < BLKSIZE) {
+            DIR *dp = (DIR *) (buf + len);
+
+            __u16 excessSpace = (__u16) (dp->rec_len - dp->name_len + 4 - (dp->name_len % 4) - 8);
+
+            if(blocks[i] == 0){
+                printf("Failed to make dir, not yet implemented");
+                //allocate a new inode for dp->block
+            } else {
+                if (excessSpace >= rec_len) {
+
+                    __u16 new_rec_len = (__u16) (dp->name_len + 4 - (dp->name_len % 4) + 8);
+                    dp->rec_len = new_rec_len;
+
+                    len += dp->rec_len;
+
+                    dp = (DIR *) (buf + len);
+                    dp->name_len = (__u8) newItemLen;
+                    dp->rec_len = excessSpace;
+                    strcpy(dp->name, baseName);
+                    dp->file_type = 2;
+                    //TODO allocate  a new inode for this item
+
+                    __u32 inode = (__u32) ialloc(filep);
+                    dp->inode = inode;
+                    printf("Allocated to inode %d\n", inode);
+
+                    put_block(filep, blocks[i], buf);
+
+                    get_block(filep, gp->bg_inode_table + (inode - 1) / 8, buf);
+                    INODE *newDir = (INODE *) buf + (inode - 1) % 8;
+                    newDir->i_mode = 16877;
+                    __u32 block = (__u32) makeDiskBlock();
+                    newDir->i_block[0] = block;
+                    printf("The new dir is stored on block %d\n", newDir->i_block[0]);
+                    newDir->i_block[1] = 0;
+                    newDir->i_ctime = (__u32) time(NULL);
+                    newDir->i_mtime = newDir->i_mtime;
+                    newDir->i_atime = newDir->i_mtime;
+                    newDir->i_links_count = 1;
+                    newDir->i_flags = 0;
+                    newDir->i_size = 1024;
+
+                    put_block(filep, gp->bg_inode_table + (inode - 1) / 8, buf);
+
+                    get_block(filep, block, buf);
+
+                    dp = (DIR *) buf;
+                    dp->inode = inode;
+                    strcpy(dp->name, ".");
+                    dp->rec_len = 12;
+                    dp->name_len = 1;
+
+                    dp = (DIR *) buf + 12;
+                    dp->inode = 2;
+                    strcpy(dp->name, "..");
+                    dp->rec_len = BLKSIZE - 12;
+                    dp->name_len = 2;
+
+                    put_block(filep, block, buf);
+
+
+
+
+
+                    //break out of for loop and while loop
+//
+//                    len = 0;
+//                    get_block(filep, blocks[i], buf);
+//                    while (len < BLKSIZE) {
+//                        dp = (DIR *) (buf + len);
+//                        len += dp->rec_len;
+//                        printName(dp->name, dp->name_len);
+//                        printf("\n");
+//                    }
+
+                    success = 1;
+                    i = 69;
+                    break;
+                }
+            }
+
+            len += dp->rec_len;
+        }
+
+    }
+
+    if(!success){
+        //TODO allocate a new inode and put it in the wd i_block
+
+        //TODO \/
+
+        //Reload the current directory in case cwd has been modified
+    }
+
+    char reload[3] = "./";
+    cd(reload);
+
+}
+
+#define FUNCTIONSCOUNT 6
+
+char *functionNames[FUNCTIONSCOUNT] = {"ls", "cd", "cat", "help", "pwd", "mkdir"};
 
 void help(){
 
@@ -622,9 +889,10 @@ void help(){
     }
 }
 
-void (*functions[FUNCTIONSCOUNT])() = {ls, cd, cat, help, pwd};
+void (*functions[FUNCTIONSCOUNT])() = {ls, cd, cat, help, pwd, mkdir};
 
 int main(int argc, char* args[]) {
+
     while(filep == 0) {
         char fileName[124];
         int i = 0;
@@ -636,7 +904,7 @@ int main(int argc, char* args[]) {
             scanf("%s", fileName);
         }
 
-        filep = open(fileName, O_RDONLY);
+        filep = open(fileName, O_RDWR);
 
         if(filep == 0){
             printf("Failed to open disk, try again.\n");
@@ -656,6 +924,7 @@ int main(int argc, char* args[]) {
     char response[1024] = "\0";
 
     do {
+        //pwd();
         printf("$ ");
         fgets(&response, 1024, stdin);
 
@@ -672,6 +941,7 @@ int main(int argc, char* args[]) {
         for(int i = 0; i < FUNCTIONSCOUNT; i++){
             if(strcmp(functionNames[i], response) == 0){
                 functions[i](arguments);
+                printf("\n");
                 commandFound = 1;
                 break;
             }
@@ -682,6 +952,8 @@ int main(int argc, char* args[]) {
         }
 
     } while (strcmp(response, "quit") != 0);
+
+    //TODO implement unmount
 
 }
 
