@@ -133,7 +133,7 @@ lookUp(char *file){
 
 
             if (strcmp(dp->name, file) == 0) {
-                //printf("Found %s, it is a %d type:\n", file, dp->file_type);
+                //printf("Found %s, it is a %d type:\n", filep, dp->file_type);
                 int cur_inode = dp->inode;
                 get_block(fd, iblock + (cur_inode - 1) / 8, buf);
                 cwd = (INODE *) buf + (cur_inode -1 ) % 8;
