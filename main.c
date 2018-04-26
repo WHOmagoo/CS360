@@ -232,7 +232,7 @@ INODE * getDir(char *dir, char buf[BLKSIZE]){
 
     while (lookingFor != 0) {
         INODE * nextDir = getInBlock(lookingFor, curBuf, curDir, 2);
-        if(nextDir && (nextDir->i_mode >> 14) % 2 == 1) {
+        if(nextDir) {
                 curDir = nextDir;
         } else {
             printf("Unable to find %s, %u\n", lookingFor, nextDir);
@@ -872,8 +872,8 @@ void mkdir(char* pathName){
         //Reload the current directory in case cwd has been modified
     }
 
-    char reload[3] = "./";
-    cd(reload);
+    char reload[4] = ".";
+    //cd(reload);
 
 }
 
