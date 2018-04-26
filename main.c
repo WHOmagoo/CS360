@@ -152,7 +152,8 @@ INODE * searchInDirectBlock(char *name, char buf[]){
 }
 
 //looks in buf to find the specified file
-INODE * getInBlock(char *file, char buf[BLKSIZE], INODE *curDir, int type) {
+//*inode is the inode number that it was found in, can be NULL
+INODE * getInBlock(char *file, char buf[BLKSIZE], INODE *curDir, int type, int *inode) {
     int found = 0;
 
     int curBlock[15];
@@ -179,6 +180,11 @@ INODE * getInBlock(char *file, char buf[BLKSIZE], INODE *curDir, int type) {
             if (my_strcmp(dp->name, file, dp->name_len) == 0) {
 
                 char buftmp[BLKSIZE];
+
+                if(inode) {
+                    *inode = dp->inode;
+                }
+
                 get_block(filep, gp->bg_inode_table + (dp->inode - 1) / 8, buftmp);
                 INODE *dirTmp = (INODE *) buftmp + (dp->inode - 1) % 8;
 
@@ -222,7 +228,8 @@ INODE * getInBlock(char *file, char buf[BLKSIZE], INODE *curDir, int type) {
 }
 
 //use -1 for any inode type
-INODE * getInode(char *dir, char buf[BLKSIZE], int type){
+//number is used for return
+INODE * getInode(char *dir, char buf[BLKSIZE], int type, int *number){
     char curBuf[BLKSIZE];
     INODE *curDir;
 
@@ -247,7 +254,7 @@ INODE * getInode(char *dir, char buf[BLKSIZE], int type){
     int finished = 0;
 
     while (lookingFor != 0) {
-        INODE * nextDir = getInBlock(lookingFor, curBuf, curDir, type);
+        INODE * nextDir = getInBlock(lookingFor, curBuf, curDir, type, number);
         if(nextDir) {
                 curDir = nextDir;
         } else {
@@ -314,8 +321,19 @@ INODE * getInode(char *dir, char buf[BLKSIZE], int type){
 
 }
 
-INODE * getDir(char *dir, char buf[BLKSIZE]){
-    return getInode(dir, buf, 2);
+int getInodeNumber(char *dir, char buf[BLKSIZE]){
+    int result =  0;
+    getInode(dir, buf, -1, &result);
+    if(result == 0){
+        printf("Could not find the inode for %s\n", dir);
+    }
+
+    return result;
+
+}
+
+INODE * getDir(char *dir, char buf[BLKSIZE], int *num){
+    return getInode(dir, buf, 2, num);
 }
 
 
@@ -421,12 +439,12 @@ int getParent(INODE **inode, char buf[BLKSIZE]){
     return curInode;
 }
 
-int getInodeNum(INODE *inode, char buf[BLKSIZE]){
-    char thisBuf[BLKSIZE];
-    bufcpy(thisBuf, buf);
-    INODE *thisInode = (INODE *) ((u_int32_t) thisBuf + (u_int32_t) inode - (u_int32_t) buf);
-    return getParent(&thisInode, thisBuf);
-}
+//int getInodeNum(INODE *inode, char buf[BLKSIZE]){
+//    char thisBuf[BLKSIZE];
+//    bufcpy(thisBuf, buf);
+//    INODE *thisInode = (INODE *) ((u_int32_t) thisBuf + (u_int32_t) inode - (u_int32_t) buf);
+//    return getParent(&thisInode, thisBuf);
+//}
 
 char *getName(INODE *inode, char buf[BLKSIZE]){
     int iNodeNum = getParent(&inode, buf);
@@ -542,11 +560,11 @@ void cat(char *location){
 
     char buf[BLKSIZE];
 
-    INODE *dir = getDir(location, buf);
+    INODE *dir = getDir(location, buf, NULL);
 
     if(dir) {
 
-        INODE *file = getInBlock(fileName, buf, dir, 1);
+        INODE *file = getInBlock(fileName, buf, dir, 1, NULL);
 
         if(file) {
 
@@ -594,7 +612,7 @@ void cd(char *dir){
 
     char buf[BLKSIZE];
 
-    INODE *newDir = getDir(dir, buf);
+    INODE *newDir = getDir(dir, buf, NULL);
 
     if(newDir != 0){
         bufcpy(iBuf, buf);
@@ -605,10 +623,11 @@ void cd(char *dir){
 
 void ls(char *dir) {
 
-    char *curBuf[BLKSIZE];
+    char curBuf[BLKSIZE];
     INODE *curInode;
 
-    curInode = getDir(dir, curBuf);
+    int inodeNum;
+    curInode = getDir(dir, curBuf, &inodeNum);
     if(curInode) {
 
         int curBlock[15];
@@ -825,14 +844,15 @@ void my_rmdir(char* pathName){
     char buf[BLKSIZE];
     char parentBuf[BLKSIZE];
 
-    int curInode = getInodeNum(cwd, iBuf);
+//    int curInode = getInodeNum(cwd, iBuf);
 
-    INODE *toDelete = getDir(pathName, buf);
+    int curInode;
+    INODE *toDelete = getDir(pathName, buf, &curInode);
 
     if(toDelete) {
         bufcpy(parentBuf, buf);
         INODE *parent = (INODE *) ((u_int32_t) parentBuf + (u_int32_t) toDelete - (u_int32_t) buf);
-        int inodeToRemove = getParent(&parent, parentBuf);
+        int excess = getParent(&parent, parentBuf);
 
         int blocks[15];
 
@@ -856,7 +876,7 @@ void my_rmdir(char* pathName){
             return;
         }
 
-        if (curInode == ((DIR *) buf)->inode) {
+        if (curInode == ((DIR *) parentBuf)->inode) {
             printf("Couldn't remove %s, it was the current directory", pathName);
             return;
         }
@@ -878,13 +898,13 @@ void my_rmdir(char* pathName){
 
             while (len < BLKSIZE) {
 
-                if (dp->inode == inodeToRemove) {
+                if (dp->inode == curInode) {
                     if (!prev) {
                         if (i > 0) {
                             //This will bug if the deleted directory has a name length close to BLKSIZE
                             idealloc(filep, parentBlocks[i]);
                             parent->i_block[i] = 0;
-                            put_block(filep, gp->bg_inode_table + (getInodeNum(parent, buf) - 1) / 8, buf);
+                            put_block(filep, gp->bg_inode_table + (curInode - 1) / 8, buf);
 
                             //break out of for loop and while loop;
                             i = 69;
@@ -922,7 +942,7 @@ void my_rmdir(char* pathName){
             destroyDiskBlock(blocks[i]);
         }
 
-        idealloc(filep, inodeToRemove);
+        idealloc(filep, curInode);
         //shouldn't need to look in the singly and doubly linked blocks because they should be 0
     }
 }
@@ -949,7 +969,7 @@ void mkdir(char* pathName){
         }
     }
 
-    INODE *cur = getDir(pathName, buf);
+    INODE *cur = getDir(pathName, buf, NULL);
 
     if(cur) {
         int blocks[15];
@@ -1000,7 +1020,7 @@ void mkdir(char* pathName){
                 blocks[i] = makeDiskBlock();
 
                 printf("We might get errors\n");
-                //TODO inode->blocks doesn't get incremented
+                //TODO inode->blocks count doesn't get incremented
                 get_block(filep, blocks[i], buf);
                 dp = (DIR *) buf;
                 dp->name_len = 0;
@@ -1120,16 +1140,18 @@ void touch(char * dir){
         }
 
         char buf[BLKSIZE];
-        char backup[BLKSIZE];
-        INODE *parentDirectory = getDir(dir, buf);
+        INODE *parentDirectory = getDir(dir, buf, NULL);
 
         if(parentDirectory) {
-            INODE *toTouch = getInBlock(basename, buf, parentDirectory, -1);
+            int inodeNum;
+
+            INODE *toTouch = getInBlock(basename, buf, parentDirectory, -1, &inodeNum);
             if(toTouch) {
+
                 toTouch->i_atime = (__u32) time(NULL);
                 toTouch->i_mtime = toTouch->i_atime;
-                bufcpy(backup, buf);
-                put_block(filep, gp->bg_inode_table + (getParent(&toTouch, buf) - 1) / 8, backup);
+
+                put_block(filep, gp->bg_inode_table + (inodeNum - 1) / 8, buf);
             } else {
                 return;
             }
@@ -1144,55 +1166,143 @@ void touch(char * dir){
 
 void stat(char *dir){
     if(dir) {
-        char pathname[2];
-        char *basename = splitLast(dir);
-        if(!basename && *dir != '/'){
-            basename = dir;
-            pathname[0] = '/';
-            pathname[1] = '\0';
-        } else if(!basename && *dir == '/'){
-            basename = dir+1;
-            pathname[0] = '/';
-            pathname[1] = '\0';
-        }
+//        char pathname[2];
+//        char *basename = splitLast(dir);
+//        if(!basename && *dir != '/'){
+//            basename = dir;
+//            pathname[0] = '/';
+//            pathname[1] = '\0';
+//        } else if(!basename && *dir == '/'){
+//            basename = dir+1;
+//            pathname[0] = '/';
+//            pathname[1] = '\0';
+//            dir = pathname;
+//        }
 
         char buf[BLKSIZE];
 
-        INODE *item = getInode(dir, buf, -1);
-
         int inode = -1;
-        int mode = item->i_mode;
-        int uid = item->i_uid;
-        int gid = item->i_gid;
-        int nlink =item->i_links_count;
-        int size = item->i_size;
 
-        char cBuf[80];
-        int ctime = item->i_ctime;
-        getTime(ctime, cBuf);
+        INODE *item = getInode(dir, buf, -1, &inode);
 
-        char mBuf[80];
-        int mtime = item->i_mtime;
-        getTime(mtime, mBuf);
+        if(item) {
 
-        char aBuf[80];
-        int atime = item->i_atime;
-        getTime(atime, aBuf);
+            int mode = item->i_mode;
+            int uid = item->i_uid;
+            int gid = item->i_gid;
+            int nlink = item->i_links_count;
+            int size = item->i_size;
 
-        inode = getParent(&item, buf);
+            char cBuf[80];
+            int ctime = item->i_ctime;
+            getTime(ctime, cBuf);
 
-        printf("inode %d\tmode %o\tuid %d\n", inode, mode, uid);
-        printf("gid %d\tnlink %d\tsize %d\n", gid, nlink, size);
-        printf("Created: %s\n", cBuf);
-        printf("Accessed: %s\n", aBuf);
-        printf("Modified: %s\n", mBuf);
+            char mBuf[80];
+            int mtime = item->i_mtime;
+            getTime(mtime, mBuf);
 
+            char aBuf[80];
+            int atime = item->i_atime;
+
+            getTime(atime, aBuf);
+
+            printf("inode %d\tmode %x\tuid %d\n", inode, mode, uid);
+            printf("gid %d\tnlink %d\tsize %d\n", gid, nlink, size);
+            printf("Created: %s\n", cBuf);
+            printf("Accessed: %s\n", aBuf);
+            printf("Modified: %s\n", mBuf);
+        } else {
+            printf("Could not fine %s\n", dir);
+        }
     }
 }
 
-#define FUNCTIONSCOUNT 9
+void chmod(char *params){
+    if(params) {
+        char *dir = strtok(params, " ");
 
-char *functionNames[FUNCTIONSCOUNT] = {"ls", "cd", "cat", "help", "pwd", "mkdir", "rmdir", "touch", "stat"};
+        if(!dir){
+            printf("No file specified\n");
+            return;
+        }
+
+        char *sNewMode = strtok(NULL, " ");
+
+        if(!sNewMode){
+            printf("No mode specified\n");
+            return;
+        }
+
+        int inodeNum;
+        char buf[BLKSIZE];
+        INODE *item = getInode(dir, buf, -1, &inodeNum);
+
+        __u16 newMode;
+
+        if(*sNewMode >= '0' && *sNewMode <= '9') {
+            int len = 0;
+            int base = 10;
+            if(*sNewMode == '0'){
+                if(*(sNewMode + 1) == 'x' || *(sNewMode + 1) == 'X') {
+                    base = 16;
+                    len += 2;
+                } else {
+                    sNewMode++;
+                }
+            }
+
+            while(*(sNewMode + len) != '\0'){
+                if(*(sNewMode + len) >= '0' && *(sNewMode + len) <= '9') {
+                    //format ok, continue
+                } else if( base == 16 &&
+                        (*(sNewMode + len) >= 'a' && *(sNewMode + len) <= 'f' ||
+                        *(sNewMode + len) >= 'A' && *(sNewMode + len) <='F')
+                        ) {
+                    //format ok, continue
+                } else {
+                    printf("Did not use a valid number\n");
+                    return;
+                }
+
+                len++;
+            }
+
+            if(base == 10 && len <= 5 || base == 16 && len <= 6){
+                int newModeTmp = strtol(sNewMode, &sNewMode, base);
+                if(newModeTmp < 0xFFFF){
+                    newMode = (__u16) newModeTmp;
+                } else {
+                    printf("The number was too large\n");
+                    return;
+                }
+            } else {
+                printf("The number was too large\n");
+                return;
+            }
+
+        } else {
+            //TODO implement using characters instead of numbers;
+            printf("You did not use a number\n");
+            return;
+        }
+
+        item->i_mode = newMode;
+
+        put_block(filep, gp->bg_inode_table + (inodeNum - 1) / 8, buf);
+    }
+}
+
+void quit(){
+
+}
+
+void my_creat(){
+    printf("Create\n");
+}
+
+#define FUNCTIONSCOUNT 12
+
+char *functionNames[FUNCTIONSCOUNT] = {"ls", "cd", "cat", "help", "pwd", "mkdir", "rmdir", "touch", "stat", "chmod", "quit", "creat"};
 
 void help(){
 
@@ -1202,7 +1312,7 @@ void help(){
     }
 }
 
-void (*functions[FUNCTIONSCOUNT])() = {ls, cd, cat, help, pwd, mkdir, my_rmdir, touch, stat};
+void (*functions[FUNCTIONSCOUNT])() = {ls, cd, cat, help, pwd, mkdir, my_rmdir, touch, stat, chmod, quit, my_creat};
 
 int main(int argc, char* args[]) {
 
