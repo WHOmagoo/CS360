@@ -153,7 +153,11 @@ INODE * searchInDirectBlock(char *name, char buf[]){
 
 //looks in buf to find the specified file
 //*inode is the inode number that it was found in, can be NULL
-INODE * getInBlock(char *file, char buf[BLKSIZE], INODE *curDir, int type, int *inode) {
+INODE * getInBlock(char *file, char buf[BLKSIZE], INODE *curDir, int *type, int *inode) {
+    if(!type){
+        printf("Error in get bloc, no type specified\n");
+        return NULL;
+    }
     int found = 0;
 
     int curBlock[15];
@@ -188,16 +192,17 @@ INODE * getInBlock(char *file, char buf[BLKSIZE], INODE *curDir, int type, int *
                 get_block(filep, gp->bg_inode_table + (dp->inode - 1) / 8, buftmp);
                 INODE *dirTmp = (INODE *) buftmp + (dp->inode - 1) % 8;
 
-                if(type == -1){
+                if(*type == -1){
+                    *type = dp->file_type;
                     bufcpy(buf, buftmp);
                     curDir = (INODE *) ((__uint32_t) buf + (u_int32_t) dirTmp - (u_int32_t) buftmp);
                     return curDir;
-                } else if(dp->file_type == type || ((dirTmp->i_mode >> 14) % 2 == 1 && type == 2)) {
+                } else if(dp->file_type == *type || ((dirTmp->i_mode >> 14) % 2 == 1 && *type == 2)) {
                     bufcpy(buf, buftmp);
                     curDir = (INODE *) ((u_int32_t) buf + (u_int32_t) dirTmp - (u_int32_t) buftmp);
                     return curDir;
                 } else {
-                    printf("Could not obtain %s, it was the wrong type.\nLooking for a %d type, it was a %d type", file, type, dp->file_type);
+                    printf("Could not obtain %s, it was the wrong type.\nLooking for a %d type, it was a %d type", file, *type, dp->file_type);
                     return 0;
                 }
 
@@ -228,8 +233,8 @@ INODE * getInBlock(char *file, char buf[BLKSIZE], INODE *curDir, int type, int *
 }
 
 //use -1 for any inode type
-//number is used for return
-INODE * getInode(char *dir, char buf[BLKSIZE], int type, int *number){
+//number is used for return, returns the inode that dir was found in
+INODE * getInode(char *dir, char buf[BLKSIZE], int *type, int *number){
     //only used if looking inside of current directory
     char dirName[BLKSIZE] = "./";
 
@@ -262,12 +267,17 @@ INODE * getInode(char *dir, char buf[BLKSIZE], int type, int *number){
     char *lookingFor = strtok(dir, "/");
     int finished = 0;
 
+    int typeBackup = -1;
+    if(type) {
+        int typeBackup = *type;
+    }
     while (lookingFor != 0) {
+        *type = typeBackup;
         INODE * nextDir = getInBlock(lookingFor, curBuf, curDir, type, number);
         if(nextDir) {
                 curDir = nextDir;
         } else {
-            printf("Unable to find %s, %u\n", lookingFor, nextDir);
+            printf("Unable to find %s, %u\n", lookingFor, (unsigned int) nextDir);
             return 0;
         }
 //        int found = 0;
@@ -332,7 +342,8 @@ INODE * getInode(char *dir, char buf[BLKSIZE], int type, int *number){
 
 int getInodeNumber(char *dir, char buf[BLKSIZE]){
     int result =  0;
-    getInode(dir, buf, -1, &result);
+    int type = -1;
+    getInode(dir, buf, &type, &result);
     if(result == 0){
         printf("Could not find the inode for %s\n", dir);
     }
@@ -342,7 +353,8 @@ int getInodeNumber(char *dir, char buf[BLKSIZE]){
 }
 
 INODE * getDir(char *dir, char buf[BLKSIZE], int *num){
-    return getInode(dir, buf, 2, num);
+    int type = 2;
+    return getInode(dir, buf, &type, num);
 }
 
 
@@ -573,7 +585,8 @@ void cat(char *location){
 
     if(dir) {
 
-        INODE *file = getInBlock(fileName, buf, dir, 1, NULL);
+        int type = 1;
+        INODE *file = getInBlock(fileName, buf, dir, &type, NULL);
 
         if(file) {
 
@@ -701,8 +714,21 @@ void ls(char *dir) {
                         break;
                 }
 
-                printf("\t%d\t%s\t%8d\t%s\t%d\t%d\t%d\t", curInode->i_links_count, timeBuf, curInode->i_size, permissions, curInode->i_block[0], dp->inode, blockNum);
+                int block = 0;
+
+                if(dp->file_type != 7){
+                    block = curInode->i_block[0];
+                }
+
+                printf("\t%d\t%s\t%8d\t%s\t%d\t%d\t%d\t", curInode->i_links_count, timeBuf, curInode->i_size, permissions, block, dp->inode, blockNum);
                 printName(dp->name, dp->name_len);
+                if(dp->file_type == 7){
+                    char symLinkBuf[BLKSIZE];
+                    //get_block(filep, gp->bg_inode_table + (dp->inode - 1) / 8, symLinkBuf);
+                    //INODE *inode = (INODE *)  (buf + (dp->inode - 1) % 8);
+                    char *link = (char *) curInode->i_block;//curInode//(char *) inode->i_block;
+                    printf(" -> %s", link);
+                }
                 printf("\n");
             }
         }
@@ -844,7 +870,7 @@ int idealloc(int file, int inodeNum){
         put_block(file, gp->bg_inode_bitmap, buf);
         return 1;
     } else {
-        printf("Inode %s was already deallocated\n", inodeNum);
+        printf("Inode %d was already deallocated\n", inodeNum);
         return 0;
     }
 }
@@ -956,9 +982,17 @@ void my_rmdir(char* pathName){
     }
 }
 
-void makeChild(char* pathName, char*childName, int *r_iNode, int *r_parentINode){
+//For link, you must shift the actual type left by 4 and then append type 8.
+//A link to type two becomes 0010 1000
+void makeChild(char* pathName, char*childName, __u8 type, int *r_iNode, int *r_parentINode){
     char buf[BLKSIZE];
     INODE *cur = getDir(pathName, buf, NULL);
+
+    if(type > 7){
+        if(!r_iNode || !r_parentINode){
+            printf("Trying to make a link but there was no link specified\n");
+        }
+    }
 
     if(cur) {
         int blocks[15];
@@ -981,7 +1015,14 @@ void makeChild(char* pathName, char*childName, int *r_iNode, int *r_parentINode)
                     if (!pathName) {
                         pathName = "directory";
                     }
-                    printf("Could not make %s, it already exists in %s", childName, pathName);
+                    printf("Could not make %s, it already exists in %s\n", childName, pathName);
+                    if(r_iNode){
+                        *r_iNode = 0;
+                    }
+
+                    if(r_parentINode){
+                        *r_parentINode = 0;
+                    }
                     return;
                 }
 
@@ -1036,15 +1077,23 @@ void makeChild(char* pathName, char*childName, int *r_iNode, int *r_parentINode)
                     dp->name_len = (__u8) newItemLen;
                     dp->rec_len = excessSpace;
                     strcpy(dp->name, childName);
-                    dp->file_type = 2;
+                    dp->file_type = type;
 
-                    __u32 inode = (__u32) ialloc(filep);
-                    dp->inode = inode;
+                    __u32 inode;
+
+                    if(type < 8) {
+                        inode = (__u32) ialloc(filep);
+                        dp->inode = inode;
+                    } else {
+                        dp->inode = (__u32) *r_iNode;
+                        dp->file_type = (__u8) *r_parentINode;
+                        inode = dp->inode;
+                    }
 
                     put_block(filep, blocks[i], buf);
 
                     if(r_iNode != 0){
-                        *r_iNode = inode;
+                        *r_iNode = (int) inode;
                     }
 
                     if(r_parentINode != 0){
@@ -1066,6 +1115,8 @@ void makeChild(char* pathName, char*childName, int *r_iNode, int *r_parentINode)
             //TODO allocate a new inode and put it in the wd i_block
 
             //TODO \/
+
+            printf("Running out of space");
 
         }
 
@@ -1107,7 +1158,7 @@ void mkdir(char* pathName){
     }
 
     int inode, pINode;
-    makeChild(pathName, baseName, &inode, &pINode);
+    makeChild(pathName, baseName, 2, &inode, &pINode);
 
     if(inode != 0 && pINode != 0){
         get_block(filep, gp->bg_inode_table + (inode - 1) / 8, buf);
@@ -1170,7 +1221,9 @@ void touch(char * dir){
         if(parentDirectory) {
             int inodeNum;
 
-            INODE *toTouch = getInBlock(basename, buf, parentDirectory, -1, &inodeNum);
+            int type = -1;
+
+            INODE *toTouch = getInBlock(basename, buf, parentDirectory, &type, &inodeNum);
             if(toTouch) {
 
                 toTouch->i_atime = (__u32) time(NULL);
@@ -1208,7 +1261,8 @@ void stat(char *dir){
 
         int inode = -1;
 
-        INODE *item = getInode(dir, buf, -1, &inode);
+        int type = -1;
+        INODE *item = getInode(dir, buf, &type, &inode);
 
         if(item) {
 
@@ -1260,7 +1314,8 @@ void chmod(char *params){
 
         int inodeNum;
         char buf[BLKSIZE];
-        INODE *item = getInode(dir, buf, -1, &inodeNum);
+        int type = -1;
+        INODE *item = getInode(dir, buf, &type, &inodeNum);
 
         __u16 newMode;
 
@@ -1321,20 +1376,20 @@ void quit(){
 
 }
 
-void my_creat(char *path){
+void my_creat(char *path) {
 
-    if(path) {
+    if (path) {
 
         char *pathname = strtok(path, " ");
-        if(!pathname){
+        if (!pathname) {
             printf("No file specified\n");
             return;
         }
 
         char *basename = splitLast(path);
 
-        if(basename == 0){
-            if(*path == '/'){
+        if (basename == 0) {
+            if (*path == '/') {
                 basename = path + 1;
                 pathname = "/";
             } else {
@@ -1345,19 +1400,186 @@ void my_creat(char *path){
 
         char buf[BLKSIZE];
 
-        int parentInode;
-        INODE *parent = getDir(pathname, buf, &parentInode);
-        printf("Creating in inode %d\n", parentInode);
-    } else {
-        printf("No file specified");
+        int inode, parentInode;
+        makeChild(pathname, basename, 1, &inode, &parentInode);
+
+        if (inode != 0 && parentInode != 0) {
+            get_block(filep, gp->bg_inode_table + (inode - 1) / 8, buf);
+            INODE *newDir = (INODE *) buf + (inode - 1) % 8;
+            newDir->i_mode = 0x81a4;
+            newDir->i_block[0] = 0;
+            newDir->i_ctime = (__u32) time(NULL);
+            newDir->i_mtime = newDir->i_ctime;
+            newDir->i_atime = newDir->i_ctime;
+            newDir->i_links_count = 1;
+            newDir->i_flags = 0;
+            newDir->i_size = 0;
+
+            put_block(filep, gp->bg_inode_table + (inode - 1) / 8, buf);
+
+        } else {
+            printf("No file specified");
+        }
+
+
     }
-
-
 }
 
-#define FUNCTIONSCOUNT 12
+void hardLink(char *command){
+    if(command) {
 
-char *functionNames[FUNCTIONSCOUNT] = {"ls", "cd", "cat", "help", "pwd", "mkdir", "rmdir", "touch", "stat", "chmod", "quit", "creat"};
+        char *newFilePath = strtok(command, " ");
+        char newFilePathBuf[BLKSIZE];
+        char smallBuf[2] = ".";
+
+        strcpy(newFilePathBuf, newFilePath);
+
+
+        char *linkPath = strtok(NULL, " ");
+        char linkPathBuf[BLKSIZE];
+
+        if(linkPath) {
+            strcpy(linkPathBuf, linkPath);
+            linkPath = linkPathBuf;
+
+        }
+
+        if (!newFilePath || !linkPath) {
+            printf("No file specified\n");
+            return;
+        }
+
+        char *newBasename = splitLast(newFilePathBuf);
+
+        if (newBasename == 0) {
+            if (newFilePathBuf[0] == '/') {
+                newBasename = newFilePathBuf + 1;
+                newFilePathBuf[0] = '/';
+                newFilePathBuf[1] = '\0';
+            } else {
+                newBasename = newFilePathBuf;
+                newFilePath = smallBuf;
+            }
+        }
+
+        char buf[BLKSIZE];
+        int type = -1;
+        int linkLocation;
+
+        getInode(linkPathBuf, buf, &type, &linkLocation);
+
+        if(type == 1 || type == 7) {
+        } else {
+            printf("Trying to link to an invalid file type");
+            return;
+        }
+
+        makeChild(newFilePath, newBasename, 8, &linkLocation, &type);
+
+        if(linkLocation != 0 && type!= 0){
+            if(linkLocation  == 0)
+            get_block(filep, gp->bg_inode_table + (linkLocation - 1) / 8, buf);
+            INODE *linkDir = (INODE *) buf + (linkLocation - 1) % 8;
+            linkDir->i_atime = (__u32) time(NULL);
+            linkDir->i_links_count += 1;
+
+            put_block(filep, gp->bg_inode_table + (linkLocation - 1) / 8, buf);
+
+        } else {
+            printf("No file specified\n");
+        }
+    } else {
+        printf("No parameers specified\n");
+    }
+}
+
+void my_symlink(char *command){
+    if(command) {
+
+        char *newFilePath = strtok(command, " ");
+        char newFilePathBuf[BLKSIZE];
+        char smallBuf[2] = ".";
+
+        strcpy(newFilePathBuf, newFilePath);
+
+
+        char *linkPath = strtok(NULL, " ");
+        char linkPathBuf[60];
+
+        if(linkPath) {
+            if(strlen(linkPath) < 60) {
+                strcpy(linkPathBuf, linkPath);
+                linkPath = linkPathBuf;
+            } else {
+                printf("Link was too long\n");
+                return;
+            }
+
+        }
+
+        if (!newFilePath || !linkPath) {
+            printf("No file specified\n");
+            return;
+        }
+
+        char *newBasename = splitLast(newFilePathBuf);
+
+        if (newBasename == 0) {
+            if (newFilePathBuf[0] == '/') {
+                newBasename = newFilePathBuf + 1;
+                newFilePathBuf[0] = '/';
+                newFilePathBuf[1] = '\0';
+            } else {
+                newBasename = newFilePathBuf;
+                newFilePath = smallBuf;
+            }
+        }
+
+        char buf[BLKSIZE];
+        int linkLocation;
+
+        makeChild(newFilePath, newBasename, 7, &linkLocation, NULL);
+
+        if(linkLocation != 0){
+            get_block(filep, gp->bg_inode_table + (linkLocation - 1) / 8, buf);
+            INODE *symlinkInode = (INODE *) (buf + (linkLocation - 1) % 8);
+            symlinkInode->i_mode = 0xa1ff;
+            symlinkInode->i_ctime = (__u32) time(NULL);
+            symlinkInode->i_atime = symlinkInode->i_ctime;
+            symlinkInode->i_mtime = symlinkInode->i_ctime;
+            symlinkInode->i_links_count = 7;
+            symlinkInode->i_size = 0;
+            symlinkInode->i_block[0] = (__u32) makeDiskBlock();
+            symlinkInode->i_block[1] = 0;
+
+            char *symlink =  (char*) symlinkInode->i_block;
+
+            __u32 buffer = buf;
+            __u32 tmp = symlinkInode->i_block;
+            __u32 dif = tmp - buffer;
+
+            printf("%d\n", symlink);
+//
+            strcpy(symlink, linkPathBuf);
+//
+//            char *newLink = (char*) symlinkInode->i_block;
+//
+//            printf("***%s***%s\n", symlink, newLink);
+
+            put_block(filep, gp->bg_inode_table + (linkLocation - 1) / 8, buf);
+
+
+        } else {
+            printf("No file specified\n");
+        }
+    } else {
+        printf("No parameers specified\n");
+    }
+}
+
+#define FUNCTIONSCOUNT 14
+
+char *functionNames[FUNCTIONSCOUNT] = {"ls", "cd", "cat", "help", "pwd", "mkdir", "rmdir", "touch", "stat", "chmod", "quit", "creat", "link", "symlink"};
 
 void help(){
 
@@ -1367,7 +1589,7 @@ void help(){
     }
 }
 
-void (*functions[FUNCTIONSCOUNT])() = {ls, cd, cat, help, pwd, mkdir, my_rmdir, touch, stat, chmod, quit, my_creat};
+void (*functions[FUNCTIONSCOUNT])() = {ls, cd, cat, help, pwd, mkdir, my_rmdir, touch, stat, chmod, quit, my_creat, hardLink, my_symlink};
 
 int main(int argc, char* args[]) {
 
@@ -1413,7 +1635,7 @@ int main(int argc, char* args[]) {
     do {
         pwd();
         printf("$ ");
-        fgets(&response, 1024, stdin);
+        fgets(response, 1024, stdin);
 
         char *c = strchr(response, '\n');
         if(c) {
