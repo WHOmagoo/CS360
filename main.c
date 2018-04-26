@@ -230,12 +230,16 @@ INODE * getInBlock(char *file, char buf[BLKSIZE], INODE *curDir, int type, int *
 //use -1 for any inode type
 //number is used for return
 INODE * getInode(char *dir, char buf[BLKSIZE], int type, int *number){
+    //only used if looking inside of current directory
+    char dirName[BLKSIZE] = "./";
+
     char curBuf[BLKSIZE];
     INODE *curDir;
 
     if(dir == 0){
-        bufcpy(buf, iBuf);
-        return (INODE *) ((u_int32_t )buf + (u_int32_t )cwd - (u_int32_t )iBuf);
+        dir = dirName;
+        //bufcpy(buf, iBuf);
+        //return (INODE *) ((u_int32_t )buf + (u_int32_t )cwd - (u_int32_t )iBuf);
     }
 
     if(*dir == '/'){
@@ -243,10 +247,15 @@ INODE * getInode(char *dir, char buf[BLKSIZE], int type, int *number){
         //copy root into curBuf
         get_block(filep, gp->bg_inode_table, curBuf);
         curDir = (INODE *) curBuf + 1;
+        *number = gp->bg_inode_table + 1;
     } else {
         //copy cwd into curBuf
         bufcpy(curBuf, iBuf);
         curDir = (INODE *) ((u_int32_t ) curBuf + (u_int32_t ) cwd - (u_int32_t ) iBuf);
+
+        strcat(dirName, dir);
+        dir = dirName;
+
     }
 
 
@@ -947,33 +956,13 @@ void my_rmdir(char* pathName){
     }
 }
 
-void mkdir(char* pathName){
-    if(pathName == 0){
-        printf("No path specified");
-        return;
-    }
-
-    //remove trailing back slash
-    pathName = strtok(pathName, "\n");
-
+void makeChild(char* pathName, char*childName, int *r_iNode, int *r_parentINode){
     char buf[BLKSIZE];
-    char *baseName = splitLast(pathName);
-
-    if(baseName == 0) {
-        if(*pathName == '/'){
-            baseName = pathName + 1;
-            pathName = "/";
-        } else {
-            baseName = pathName;
-            pathName = 0;
-        }
-    }
-
     INODE *cur = getDir(pathName, buf, NULL);
 
     if(cur) {
         int blocks[15];
-        int newItemLen = strlen(baseName);
+        int newItemLen = strlen(childName);
         int rec_len = newItemLen + ((newItemLen - 1) % 4 - 4) * -1 - 1 + 8;
 
         for (int i = 0; i < 15; i++) {
@@ -988,11 +977,11 @@ void mkdir(char* pathName){
                 DIR *dp = (DIR *) (buf + len);
                 len += dp->rec_len;
 
-                if (my_strcmp(dp->name, baseName, dp->name_len) == 0) {
+                if (my_strcmp(dp->name, childName, dp->name_len) == 0) {
                     if (!pathName) {
                         pathName = "directory";
                     }
-                    printf("Could not make %s, it already exists in %s", baseName, pathName);
+                    printf("Could not make %s, it already exists in %s", childName, pathName);
                     return;
                 }
 
@@ -1046,56 +1035,22 @@ void mkdir(char* pathName){
                     dp = (DIR *) (buf + len);
                     dp->name_len = (__u8) newItemLen;
                     dp->rec_len = excessSpace;
-                    strcpy(dp->name, baseName);
+                    strcpy(dp->name, childName);
                     dp->file_type = 2;
 
                     __u32 inode = (__u32) ialloc(filep);
                     dp->inode = inode;
-                    //printf("Allocated to inode %d\n", inode);
 
                     put_block(filep, blocks[i], buf);
 
-                    get_block(filep, gp->bg_inode_table + (inode - 1) / 8, buf);
-                    INODE *newDir = (INODE *) buf + (inode - 1) % 8;
-                    newDir->i_mode = 16877;
-                    __u32 block = (__u32) makeDiskBlock();
-                    newDir->i_block[0] = block;
-                    newDir->i_block[1] = 0;
-                    newDir->i_ctime = (__u32) time(NULL);
-                    newDir->i_mtime = newDir->i_ctime;
-                    newDir->i_atime = newDir->i_ctime;
-                    newDir->i_links_count = 1;
-                    newDir->i_flags = 0;
-                    newDir->i_size = 1024;
+                    if(r_iNode != 0){
+                        *r_iNode = inode;
+                    }
 
-                    put_block(filep, gp->bg_inode_table + (inode - 1) / 8, buf);
+                    if(r_parentINode != 0){
+                        *r_parentINode = parentInode;
+                    }
 
-                    get_block(filep, block, buf);
-
-                    dp = (DIR *) buf;
-                    dp->inode = inode;
-                    strcpy(dp->name, ".");
-                    dp->rec_len = 12;
-                    dp->name_len = 1;
-                    dp->file_type = 2;
-
-                    dp = (DIR *) (buf + 12);
-                    dp->inode = parentInode;
-                    strcpy(dp->name, "..");
-                    dp->rec_len = BLKSIZE - 12;
-                    dp->file_type = 2;
-                    dp->name_len = 2;
-
-                    dp = (DIR *) buf;
-                    dp = (DIR *) (buf + 12);
-
-                    put_block(filep, block, buf);
-
-
-
-
-
-                    //break out of for loop and while loop
                     success = 1;
                     i = 69;
                     break;
@@ -1119,8 +1074,78 @@ void mkdir(char* pathName){
         cd(reload);
     } else {
         printf("Could not find directory");
+        if(r_iNode){
+            *r_iNode = 0;
+        }
+
+        if(r_parentINode){
+            *r_parentINode = 0;
+        }
+    }
+}
+
+void mkdir(char* pathName){
+    if(pathName == 0){
+        printf("No path specified");
+        return;
     }
 
+    //remove trailing back slash
+    pathName = strtok(pathName, "\n");
+
+    char buf[BLKSIZE];
+    char *baseName = splitLast(pathName);
+
+    if(baseName == 0) {
+        if(*pathName == '/'){
+            baseName = pathName + 1;
+            pathName = "/";
+        } else {
+            baseName = pathName;
+            pathName = 0;
+        }
+    }
+
+    int inode, pINode;
+    makeChild(pathName, baseName, &inode, &pINode);
+
+    if(inode != 0 && pINode != 0){
+        get_block(filep, gp->bg_inode_table + (inode - 1) / 8, buf);
+        INODE *newDir = (INODE *) buf + (inode - 1) % 8;
+        newDir->i_mode = 16877;
+        __u32 block = (__u32) makeDiskBlock();
+        newDir->i_block[0] = block;
+        newDir->i_block[1] = 0;
+        newDir->i_ctime = (__u32) time(NULL);
+        newDir->i_mtime = newDir->i_ctime;
+        newDir->i_atime = newDir->i_ctime;
+        newDir->i_links_count = 1;
+        newDir->i_flags = 0;
+        newDir->i_size = 1024;
+
+        put_block(filep, gp->bg_inode_table + (inode - 1) / 8, buf);
+
+        get_block(filep, block, buf);
+
+        DIR* dp = (DIR *) buf;
+        dp->inode = (__u32) inode;
+        strcpy(dp->name, ".");
+        dp->rec_len = 12;
+        dp->name_len = 1;
+        dp->file_type = 2;
+
+        dp = (DIR *) (buf + 12);
+        dp->inode = (__u32) pINode;
+        strcpy(dp->name, "..");
+        dp->rec_len = BLKSIZE - 12;
+        dp->file_type = 2;
+        dp->name_len = 2;
+
+        dp = (DIR *) buf;
+        dp = (DIR *) (buf + 12);
+
+        put_block(filep, block, buf);
+    }
 }
 
 void touch(char * dir){
@@ -1296,8 +1321,38 @@ void quit(){
 
 }
 
-void my_creat(){
-    printf("Create\n");
+void my_creat(char *path){
+
+    if(path) {
+
+        char *pathname = strtok(path, " ");
+        if(!pathname){
+            printf("No file specified\n");
+            return;
+        }
+
+        char *basename = splitLast(path);
+
+        if(basename == 0){
+            if(*path == '/'){
+                basename = path + 1;
+                pathname = "/";
+            } else {
+                basename = path;
+                pathname = 0;
+            }
+        }
+
+        char buf[BLKSIZE];
+
+        int parentInode;
+        INODE *parent = getDir(pathname, buf, &parentInode);
+        printf("Creating in inode %d\n", parentInode);
+    } else {
+        printf("No file specified");
+    }
+
+
 }
 
 #define FUNCTIONSCOUNT 12
@@ -1388,5 +1443,3 @@ int main(int argc, char* args[]) {
     //TODO implement unmount
 
 }
-
-
